@@ -1,0 +1,11 @@
+name: 'BlueRacer'
+description: 'Compare test durations'
+author: 'tamniteo'
+inputs:
+  durations-file:
+    required: true
+    description: 'path to the durations file'
+    default: 'test_durations.csv'
+runs:
+  using: 'node16'
+  main: 'dist/index.js'
