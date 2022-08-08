@@ -26,10 +26,10 @@ export async function report(file: string): Promise<string> {
   const currentSum = sum(current)
 
   return fromTemplate(
-    medianNumberOfTests,
-    medianDefault,
-    results.size,
-    currentSum,
-    current.length
+    medianNumberOfTests, // median number of tests
+    medianDefault, // median duration of tests
+    results.size, // number of commits
+    currentSum, // current tests duration
+    current.length // current number of tests
   )
 }

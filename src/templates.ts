@@ -6,42 +6,62 @@ function relDiff(a: number, b: number): number {
 }
 
 export function fromTemplate(
-  baseCount: number,
-  medianDefault: number,
-  medianDefaultSize: number,
+  defaultSize: number,
+  defaultSum: number,
+  numberOfCommits: number,
   currentSum: number,
   currentSize: number
 ): string | PromiseLike<string> {
-  const currentDiffSize = relDiff(currentSize, medianDefaultSize)
-  const currentDiffMedian = relDiff(currentSum, medianDefault)
-  const baseCountDiff = relDiff(baseCount, currentSize)
+  const diff100Default = (100 * defaultSum) / defaultSize
+  const diff100Current = (100 * currentSum) / currentSize
+
+  const diffSize = relDiff(currentSize, defaultSize)
+  const totalDurationDiff = relDiff(currentSum, defaultSum)
+  const diff100 = relDiff(diff100Current, diff100Default)
 
   let icon = '✅'
-  if (currentDiffMedian > 10) {
+  if (totalDurationDiff > 10) {
     icon = '👀'
   }
-  if (currentDiffMedian > 30) {
+  if (totalDurationDiff > 30) {
     icon = '❌'
   }
-  if (baseCountDiff > 10) {
+
+  if (diffSize > 10) {
     icon = '✅'
   }
+
+  const sha = github.context.sha
+  const baseURL =
+    github.context.payload.pull_request &&
+    github.context.payload.pull_request.base.repo.html_url
+  const baseBranch =
+    github.context.payload.pull_request &&
+    github.context.payload.pull_request.base.ref
+  const prBranch =
+    github.context.payload.pull_request &&
+    github.context.payload.pull_request.head.ref
+
+  const url = `${baseURL}/commit/${sha}`
+  const currentDiff = diffSize.toFixed(0)
 
   return dedent`### BlueRacer unit tests performance report: ${icon}
   Everything looks great, carry on!
   
   Here are some details:
   
-  | Branch | Number of tests | Total duration
+  | Branch | Number of tests | Total duration | Duration per 100 tests |
   |-|-|-|-|
-  | \`default branch\`[^1]|${medianDefaultSize}|${medianDefault.toFixed(1)}s
-  | \`${github.context.ref}\`[^2]|${currentSize} (${currentDiffSize.toFixed(
-    0
-  )}%)|${currentSum.toFixed(1)}s (${currentDiffMedian.toFixed(0)}%)
+  | \`${baseBranch}\`[^1]|${defaultSize}|${defaultSum.toFixed(
+    1
+  )}s | ${diff100Default.toFixed(0)}s |
+  | \`${prBranch}\`[^2]|${currentSize} (${currentDiff}%)|${currentSum.toFixed(
+    1
+  )}s (${totalDurationDiff.toFixed(0)}%) | ${diff100Current.toFixed(
+    1
+  )}s (${diff100.toFixed(0)}%) |
   
-  [^1]: The previous ${baseCount} runs.
-  [^2]: More specifically, [commit \`${
-    github.context.sha
-  }\`](https://github.com/teamniteo/blueracer/commit/${github.context.sha}).
+  [^1]: The previous ${numberOfCommits} runs.
+  [^2]: More specifically, [commit \`${sha}\`](${url}).
   `
 }

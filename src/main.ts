@@ -11,6 +11,7 @@ async function run(): Promise<void> {
     const file: string = path.join(cwd(), core.getInput('durations-file'))
 
     const ref = github.context.ref
+    core.debug(`Current github.context ${JSON.stringify(github.context)}`)
 
     // on default branch
     if (ref.includes('refs/heads/')) {
@@ -27,7 +28,7 @@ async function run(): Promise<void> {
       if (!masterDataPresent) {
         core.setOutput(
           'report',
-          'No data yet, run this action in default branch.'
+          '### BlueRacer unit tests performance report: 🔎\n\nNo data yet, run this action in default branch.'
         )
         return
       }
@@ -40,6 +41,7 @@ async function run(): Promise<void> {
     }
   } catch (error) {
     if (error instanceof Error) core.setFailed(error.message)
+    if (error instanceof Error) core.debug(error.stack || 'No stacktrace')
   }
 }
 

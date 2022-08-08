@@ -40,15 +40,24 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.storeAndGC = exports.restore = void 0;
+const core = __importStar(__nccwpck_require__(2186));
 const github = __importStar(__nccwpck_require__(5438));
 const cache = __importStar(__nccwpck_require__(7799));
 const io = __importStar(__nccwpck_require__(7436));
 const C = __importStar(__nccwpck_require__(5105));
 const path = __importStar(__nccwpck_require__(5622));
+const fs = __importStar(__nccwpck_require__(5747));
 function restore() {
     return __awaiter(this, void 0, void 0, function* () {
         io.mkdirP(C.reportsPath);
-        return cache.restoreCache([C.reportsPath], C.reportsKey) !== undefined;
+        const cacheHit = (yield cache.restoreCache([C.reportsPath], C.reportsKey)) !== undefined;
+        const reportsPath = path.join(process.cwd(), C.reportsPath);
+        const files = fs.readdirSync(reportsPath);
+        core.debug(`Current reportsPath ${reportsPath}`);
+        core.debug(`Current cacheHit ${cacheHit}`);
+        core.debug(`Current reportsPath`);
+        core.debug(files.join('\n'));
+        return cacheHit && files.length > 0;
     });
 }
 exports.restore = restore;
@@ -72,14 +81,41 @@ exports.storeAndGC = storeAndGC;
 /***/ }),
 
 /***/ 5105:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.reportsKey = exports.reportsPath = void 0;
+const github = __importStar(__nccwpck_require__(5438));
+const defualtBranchSHA = (github.context.payload.pull_request &&
+    github.context.payload.pull_request.base.sha) ||
+    github.context.sha;
 exports.reportsPath = '.blueracer-reports';
-exports.reportsKey = 'blueracer-reports';
+exports.reportsKey = `blueracer-reports-${defualtBranchSHA}`;
 
 
 /***/ }),
@@ -234,6 +270,7 @@ function run() {
         try {
             const file = path.join((0, process_1.cwd)(), core.getInput('durations-file'));
             const ref = github.context.ref;
+            core.debug(`Current github.context ${JSON.stringify(github.context)}`);
             // on default branch
             if (ref.includes('refs/heads/')) {
                 if (fs.existsSync(file)) {
@@ -248,7 +285,7 @@ function run() {
                 // PR
                 const masterDataPresent = yield (0, build_1.restore)();
                 if (!masterDataPresent) {
-                    core.setOutput('report', 'No data yet, run this action in default branch.');
+                    core.setOutput('report', '### BlueRacer unit tests performance report: 🔎\n\nNo data yet, run this action in default branch.');
                     return;
                 }
                 core.debug(`Processing ${file} ...`);
@@ -261,6 +298,8 @@ function run() {
         catch (error) {
             if (error instanceof Error)
                 core.setFailed(error.message);
+            if (error instanceof Error)
+                core.debug(error.stack || 'No stacktrace');
         }
     });
 }
@@ -332,7 +371,12 @@ function report(file) {
         const medianDefault = (0, simple_statistics_1.median)(sums);
         const current = yield (0, csv_1.durationsCSV)(file);
         const currentSum = (0, simple_statistics_1.sum)(current);
-        return (0, templates_1.fromTemplate)(medianNumberOfTests, medianDefault, results.size, currentSum, current.length);
+        return (0, templates_1.fromTemplate)(medianNumberOfTests, // median number of tests
+        medianDefault, // median duration of tests
+        results.size, // number of commits
+        currentSum, // current tests duration
+        current.length // current number of tests
+        );
     });
 }
 exports.report = report;
@@ -378,32 +422,43 @@ const dedent_1 = __importDefault(__nccwpck_require__(5281));
 function relDiff(a, b) {
     return (100 * (a - b)) / ((a + b) / 2);
 }
-function fromTemplate(baseCount, medianDefault, medianDefaultSize, currentSum, currentSize) {
-    const currentDiffSize = relDiff(currentSize, medianDefaultSize);
-    const currentDiffMedian = relDiff(currentSum, medianDefault);
-    const baseCountDiff = relDiff(baseCount, currentSize);
+function fromTemplate(defaultSize, defaultSum, numberOfCommits, currentSum, currentSize) {
+    const diff100Default = (100 * defaultSum) / defaultSize;
+    const diff100Current = (100 * currentSum) / currentSize;
+    const diffSize = relDiff(currentSize, defaultSize);
+    const totalDurationDiff = relDiff(currentSum, defaultSum);
+    const diff100 = relDiff(diff100Current, diff100Default);
     let icon = '✅';
-    if (currentDiffMedian > 10) {
+    if (totalDurationDiff > 10) {
         icon = '👀';
     }
-    if (currentDiffMedian > 30) {
+    if (totalDurationDiff > 30) {
         icon = '❌';
     }
-    if (baseCountDiff > 10) {
+    if (diffSize > 10) {
         icon = '✅';
     }
+    const sha = github.context.sha;
+    const baseURL = github.context.payload.pull_request &&
+        github.context.payload.pull_request.base.repo.html_url;
+    const baseBranch = github.context.payload.pull_request &&
+        github.context.payload.pull_request.base.ref;
+    const prBranch = github.context.payload.pull_request &&
+        github.context.payload.pull_request.head.ref;
+    const url = `${baseURL}/commit/${sha}`;
+    const currentDiff = diffSize.toFixed(0);
     return (0, dedent_1.default) `### BlueRacer unit tests performance report: ${icon}
   Everything looks great, carry on!
   
   Here are some details:
   
-  | Branch | Number of tests | Total duration
+  | Branch | Number of tests | Total duration | Duration per 100 tests |
   |-|-|-|-|
-  | \`default branch\`[^1]|${medianDefaultSize}|${medianDefault.toFixed(1)}s
-  | \`${github.context.ref}\`[^2]|${currentSize} (${currentDiffSize.toFixed(0)}%)|${currentSum.toFixed(1)}s (${currentDiffMedian.toFixed(0)}%)
+  | \`${baseBranch}\`[^1]|${defaultSize}|${defaultSum.toFixed(1)}s | ${diff100Default.toFixed(0)}s |
+  | \`${prBranch}\`[^2]|${currentSize} (${currentDiff}%)|${currentSum.toFixed(1)}s (${totalDurationDiff.toFixed(0)}%) | ${diff100Current.toFixed(1)}s (${diff100.toFixed(0)}%) |
   
-  [^1]: The previous ${baseCount} runs.
-  [^2]: More specifically, [commit \`${github.context.sha}\`](https://github.com/teamniteo/blueracer/commit/${github.context.sha}).
+  [^1]: The previous ${numberOfCommits} runs.
+  [^2]: More specifically, [commit \`${sha}\`](${url}).
   `;
 }
 exports.fromTemplate = fromTemplate;
