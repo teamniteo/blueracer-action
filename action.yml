@@ -6,6 +6,14 @@ inputs:
     required: true
     description: 'path to the durations file'
     default: 'test_durations.csv'
+  percentage-warn:
+    required: false
+    description: '% of change that yields warning'
+    default: '10'
+  percentage-error:
+    required: false
+    description: '% of change that yields error'
+    default: '30'
 runs:
   using: 'node16'
   main: 'dist/index.js'

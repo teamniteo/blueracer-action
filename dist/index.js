@@ -64,14 +64,22 @@ exports.restore = restore;
 function storeAndGC(file) {
     return __awaiter(this, void 0, void 0, function* () {
         io.mkdirP(C.reportsPath);
-        yield cache.restoreCache([C.reportsPath], C.reportsKey);
+        // Restore old cache
+        const cacheHit = yield cache.restoreCache([C.reportsPath], C.reportsKeyBefore);
         io.cp(file, path.join(C.reportsPath, `${github.context.sha}.csv`));
         // keep newest 100 files
         // exec.exec('bash', [
         //   '-c',
         //   `"cd ${C.reportsPath} && ls -tr | head -n -100 | xargs --no-run-if-empty rm"`
         // ])
+        // save as new cache
         yield cache.saveCache([C.reportsPath], C.reportsKey);
+        const reportsPath = path.join(process.cwd(), C.reportsPath);
+        const files = fs.readdirSync(reportsPath);
+        core.debug(`Current reportsPath ${reportsPath}`);
+        core.debug(`Current cacheHit ${cacheHit}`);
+        core.debug(`Current reportsPath`);
+        core.debug(files.join('\n'));
         io.rmRF(C.reportsPath);
     });
 }
@@ -109,13 +117,21 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.reportsKey = exports.reportsPath = void 0;
+exports.reportsKeyBefore = exports.reportsKey = exports.reportsPath = exports.defualtBranchSHABefore = exports.defualtBranchSHA = void 0;
 const github = __importStar(__nccwpck_require__(5438));
-const defualtBranchSHA = (github.context.payload.pull_request &&
-    github.context.payload.pull_request.base.sha) ||
-    github.context.sha;
+function defualtBranchSHA() {
+    return ((github.context.payload.pull_request &&
+        github.context.payload.pull_request.base.sha) ||
+        github.context.sha);
+}
+exports.defualtBranchSHA = defualtBranchSHA;
+function defualtBranchSHABefore() {
+    return github.context.payload.before || github.context.sha;
+}
+exports.defualtBranchSHABefore = defualtBranchSHABefore;
 exports.reportsPath = '.blueracer-reports';
-exports.reportsKey = `blueracer-reports-${defualtBranchSHA}`;
+exports.reportsKey = `blueracer-reports-${defualtBranchSHA()}`;
+exports.reportsKeyBefore = `blueracer-reports-${defualtBranchSHABefore()}`;
 
 
 /***/ }),
@@ -356,6 +372,7 @@ const simple_statistics_1 = __nccwpck_require__(4214);
 const csv_1 = __nccwpck_require__(9633);
 const templates_1 = __nccwpck_require__(5303);
 const C = __importStar(__nccwpck_require__(5105));
+const core = __importStar(__nccwpck_require__(2186));
 function report(file) {
     return __awaiter(this, void 0, void 0, function* () {
         const results = yield (0, csv_1.getDefaultBranchStats)(path_1.default.join((0, process_1.cwd)(), C.reportsPath));
@@ -371,12 +388,14 @@ function report(file) {
         const medianDefault = (0, simple_statistics_1.median)(sums);
         const current = yield (0, csv_1.durationsCSV)(file);
         const currentSum = (0, simple_statistics_1.sum)(current);
+        const diffWarn = parseInt(core.getInput('percentage-warn'));
+        const diffError = parseInt(core.getInput('percentage-error'));
         return (0, templates_1.fromTemplate)(medianNumberOfTests, // median number of tests
         medianDefault, // median duration of tests
         results.size, // number of commits
         currentSum, // current tests duration
-        current.length // current number of tests
-        );
+        current.length, // current number of tests
+        diffWarn, diffError);
     });
 }
 exports.report = report;
@@ -422,22 +441,12 @@ const dedent_1 = __importDefault(__nccwpck_require__(5281));
 function relDiff(a, b) {
     return (100 * (a - b)) / ((a + b) / 2);
 }
-function fromTemplate(defaultSize, defaultSum, numberOfCommits, currentSum, currentSize) {
+function fromTemplate(defaultSize, defaultSum, numberOfCommits, currentSum, currentSize, diffWarn, diffError) {
     const diff100Default = (100 * defaultSum) / defaultSize;
     const diff100Current = (100 * currentSum) / currentSize;
     const diffSize = relDiff(currentSize, defaultSize);
     const totalDurationDiff = relDiff(currentSum, defaultSum);
     const diff100 = relDiff(diff100Current, diff100Default);
-    let icon = '✅';
-    if (totalDurationDiff > 10) {
-        icon = '👀';
-    }
-    if (totalDurationDiff > 30) {
-        icon = '❌';
-    }
-    if (diffSize > 10) {
-        icon = '✅';
-    }
     const sha = github.context.sha;
     const baseURL = github.context.payload.pull_request &&
         github.context.payload.pull_request.base.repo.html_url;
@@ -447,8 +456,21 @@ function fromTemplate(defaultSize, defaultSum, numberOfCommits, currentSum, curr
         github.context.payload.pull_request.head.ref;
     const url = `${baseURL}/commit/${sha}`;
     const currentDiff = diffSize.toFixed(0);
+    let icon = '✅';
+    let msg = 'Everything looks great, carry on!';
+    if (totalDurationDiff > diffWarn) {
+        icon = '👀';
+        msg = `Your tests appear to be *a bit slower* than average in the \`${baseBranch}\` branch. Could be worth a look?`;
+    }
+    if (totalDurationDiff > diffError) {
+        icon = '❌';
+        msg = `Whoa, hold your horses! This pull request is really slowing down your tests! Are you sure you want to merge it?`;
+    }
+    if (diffSize > 10) {
+        icon = '✅';
+    }
     return (0, dedent_1.default) `### BlueRacer unit tests performance report: ${icon}
-  Everything looks great, carry on!
+  ${msg}
   
   Here are some details:
   

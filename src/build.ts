@@ -22,7 +22,10 @@ export async function restore(): Promise<boolean> {
 
 export async function storeAndGC(file: string): Promise<void> {
   io.mkdirP(C.reportsPath)
-  await cache.restoreCache([C.reportsPath], C.reportsKey)
+
+  // Restore old cache
+  const cacheHit = await cache.restoreCache([C.reportsPath], C.reportsKeyBefore)
+
   io.cp(file, path.join(C.reportsPath, `${github.context.sha}.csv`))
 
   // keep newest 100 files
@@ -30,7 +33,16 @@ export async function storeAndGC(file: string): Promise<void> {
   //   '-c',
   //   `"cd ${C.reportsPath} && ls -tr | head -n -100 | xargs --no-run-if-empty rm"`
   // ])
+
+  // save as new cache
   await cache.saveCache([C.reportsPath], C.reportsKey)
+
+  const reportsPath = path.join(process.cwd(), C.reportsPath)
+  const files = fs.readdirSync(reportsPath)
+  core.debug(`Current reportsPath ${reportsPath}`)
+  core.debug(`Current cacheHit ${cacheHit}`)
+  core.debug(`Current reportsPath`)
+  core.debug(files.join('\n'))
 
   io.rmRF(C.reportsPath)
 }

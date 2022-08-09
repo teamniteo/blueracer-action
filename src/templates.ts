@@ -10,7 +10,9 @@ export function fromTemplate(
   defaultSum: number,
   numberOfCommits: number,
   currentSum: number,
-  currentSize: number
+  currentSize: number,
+  diffWarn: number,
+  diffError: number
 ): string | PromiseLike<string> {
   const diff100Default = (100 * defaultSum) / defaultSize
   const diff100Current = (100 * currentSum) / currentSize
@@ -18,18 +20,6 @@ export function fromTemplate(
   const diffSize = relDiff(currentSize, defaultSize)
   const totalDurationDiff = relDiff(currentSum, defaultSum)
   const diff100 = relDiff(diff100Current, diff100Default)
-
-  let icon = '✅'
-  if (totalDurationDiff > 10) {
-    icon = '👀'
-  }
-  if (totalDurationDiff > 30) {
-    icon = '❌'
-  }
-
-  if (diffSize > 10) {
-    icon = '✅'
-  }
 
   const sha = github.context.sha
   const baseURL =
@@ -45,8 +35,24 @@ export function fromTemplate(
   const url = `${baseURL}/commit/${sha}`
   const currentDiff = diffSize.toFixed(0)
 
+  let icon = '✅'
+  let msg = 'Everything looks great, carry on!'
+
+  if (totalDurationDiff > diffWarn) {
+    icon = '👀'
+    msg = `Your tests appear to be *a bit slower* than average in the \`${baseBranch}\` branch. Could be worth a look?`
+  }
+  if (totalDurationDiff > diffError) {
+    icon = '❌'
+    msg = `Whoa, hold your horses! This pull request is really slowing down your tests! Are you sure you want to merge it?`
+  }
+
+  if (diffSize > 10) {
+    icon = '✅'
+  }
+
   return dedent`### BlueRacer unit tests performance report: ${icon}
-  Everything looks great, carry on!
+  ${msg}
   
   Here are some details:
   

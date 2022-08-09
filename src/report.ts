@@ -4,6 +4,7 @@ import {median, sum} from 'simple-statistics'
 import {durationsCSV, getDefaultBranchStats} from './csv'
 import {fromTemplate} from './templates'
 import * as C from './constants'
+import * as core from '@actions/core'
 
 export async function report(file: string): Promise<string> {
   const results: Map<string, number[]> = await getDefaultBranchStats(
@@ -25,11 +26,16 @@ export async function report(file: string): Promise<string> {
   const current = await durationsCSV(file)
   const currentSum = sum(current)
 
+  const diffWarn = parseInt(core.getInput('percentage-warn'))
+  const diffError = parseInt(core.getInput('percentage-error'))
+
   return fromTemplate(
     medianNumberOfTests, // median number of tests
     medianDefault, // median duration of tests
     results.size, // number of commits
     currentSum, // current tests duration
-    current.length // current number of tests
+    current.length, // current number of tests
+    diffWarn,
+    diffError
   )
 }
