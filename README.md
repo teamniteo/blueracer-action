@@ -1,3 +1,6 @@
+> # DEPRECATED in favor of https://github.com/apps/blueracer-io
+
+
 # BlueRacer
 
 PyTest durations reporter for GitHub.
